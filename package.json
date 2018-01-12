@@ -1,0 +1,22 @@
+{
+  "name": "ifcityevent-api",
+  "version": "1.0.0",
+  "description": "API for IFCityEvent system",
+  "main": "server.js",
+  "scripts": {
+    "dev": "nodemon server.js"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "body-parser": "^1.17.2",
+    "express": "^4.15.3",
+    "lodash": "^4.17.4",
+    "moment": "^2.19.1",
+    "mongodb": "^2.2.30",
+    "node-fetch": "^1.7.3"
+  },
+  "devDependencies": {
+    "nodemon": "^1.11.0"
+  }
+}
