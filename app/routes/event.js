@@ -240,7 +240,7 @@ module.exports = function(app, db) {
         let today = getToday();
         let searchCondition = {
             $and: [
-                {invalid: { $ne: true}},
+                {invalid: { $ne: !req.body.show_invalid}},
                 {
                     $or: [
                         {start_time: { $gte: today } },
