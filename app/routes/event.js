@@ -162,7 +162,15 @@ module.exports = function(app, db) {
     });
 
     app.post('/events', (req, res) => {
-        db.collection('events').insert(req.body, (err, result) => {
+        const now = new Date(Date.now()).toISOString();
+        const events = _(req.body)
+            .map(event => {
+                event.create_time = now;
+                event.update_time = now;
+                return event;
+            })
+            .value();
+        db.collection('events').insert(events, (err, result) => {
             if (err) {
                 res.send({ 'error': err });
             } else {
@@ -178,7 +186,7 @@ module.exports = function(app, db) {
             if (err) {
                 res.send({'error':'An error has occurred'});
             } else {
-                //item = req.body;
+                item.update_time = new Timestamp();
                 if (req.body.name) {
                     item.name = req.body.name;
                 }
@@ -258,7 +266,7 @@ module.exports = function(app, db) {
         }
         db.collection('events')
             .find(searchCondition)
-            .sort({start_time: 1, name: 1})
+            .sort({end_time: -1, start_time: 1, name: 1})
             .toArray((err, items) => {
                 if (err) {
                     res.send({'error':'An error has occurred'});
