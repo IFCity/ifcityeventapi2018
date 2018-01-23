@@ -1,6 +1,7 @@
 let ObjectID = require('mongodb').ObjectID;
 let _ = require('lodash');
 let moment = require('moment');
+moment.locale('uk');
 
 
 const getToday = () => {
@@ -121,7 +122,8 @@ module.exports = function(app, db) {
         db.collection('events')
             .find(
                 {
-                    $and: [{invalid: { $ne: true}}, {
+                    $and: [
+                        {invalid: { $ne: true}}, {
                     $or: [
                         {start_time: { $gte: today } },
                         { $and: [{start_time: { $lte: today } }, {end_time: { $gte: today } }] }
@@ -257,6 +259,16 @@ module.exports = function(app, db) {
                 }
             ]
         };
+        if (req.body.new) {
+            console.log(moment().hours(0).minutes(0).seconds(0).milliseconds(0).add(1, 'days').toISOString());
+            console.log(moment().hours(0).minutes(0).seconds(0).milliseconds(0).toISOString());
+            searchCondition.$and.push({
+                $and: [
+                        {update_time: {$lt: moment().hours(0).minutes(0).seconds(0).milliseconds(0).add(1, 'days').toISOString()}},
+                        {update_time: {$gte: moment().hours(0).minutes(0).seconds(0).milliseconds(0).toISOString()}}
+                    ]
+            });
+        }
         if (req.body.categories) {
             searchCondition.$and.push({
                 category: {
@@ -266,7 +278,7 @@ module.exports = function(app, db) {
         }
         db.collection('events')
             .find(searchCondition)
-            .sort({end_time: -1, start_time: 1, name: 1})
+            .sort({start_time: 1, name: 1})
             .toArray((err, items) => {
                 if (err) {
                     res.send({'error':'An error has occurred'});
