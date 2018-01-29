@@ -184,11 +184,12 @@ module.exports = function(app, db) {
     app.put ('/events/:id', (req, res) => {
         const id = req.params.id;
         const details = { '_id': new ObjectID(id) };
+        const now = new Date(Date.now()).toISOString();
         db.collection('events').findOne(details, (err, item) => {
             if (err) {
                 res.send({'error':'An error has occurred'});
             } else {
-                item.update_time = new Timestamp();
+                item.update_time = now;
                 if (req.body.name) {
                     item.name = req.body.name;
                 }
@@ -214,14 +215,6 @@ module.exports = function(app, db) {
                     item.cover = req.body.cover;
                 }
                 item.invalid = !!req.body.invalid;
-                item.integrate = !!req.body.integrate;
-                item.promo = !!req.body.promo;
-                if (req.body.updated) {
-                    item.updated = req.body.updated;
-                }
-                if (req.body.added) {
-                    item.added = req.body.added;
-                }
                 if (req.body.source) {
                     item.source = req.body.source;
                 }
@@ -233,6 +226,9 @@ module.exports = function(app, db) {
                 }
                 if (req.body.place) {
                     item.place = req.body.place;
+                }
+                if (req.body.weeklyRecurrence) {
+                    item.weeklyRecurrence = req.body.weeklyRecurrence;
                 }
                 db.collection('events').update(details, item, (err, result) => {
                     if (err) {
@@ -246,22 +242,35 @@ module.exports = function(app, db) {
         });
     });
 
+    app.delete('/events/:id', (req, res) => {
+        const id = req.params.id;
+        const details = { '_id': new ObjectID(id) };
+        db.collection('events').remove(details, (err, item) => {
+            if (err) {
+                res.send({'error':'An error has occurred'});
+            } else {
+                res.send(item);
+            }
+        });
+    });
+
     app.post('/events/search', (req, res) => {
         let today = getToday();
         let searchCondition = {
             $and: [
                 {invalid: { $ne: !req.body.show_invalid}},
-                {
-                    $or: [
-                        {start_time: { $gte: today } },
-                        { $and: [{start_time: { $lte: today } }, {end_time: { $gte: today } }] }
-                    ]
-                }
+                {hidden: { $ne: !req.body.show_hidden}}
             ]
         };
+        if (!req.body.show_all) {
+            searchCondition.$and.push({
+                $or: [
+                    {start_time: { $gte: today } },
+                    { $and: [{start_time: { $lte: today } }, {end_time: { $gte: today } }] }
+                ]
+            });
+        }
         if (req.body.new) {
-            console.log(moment().hours(0).minutes(0).seconds(0).milliseconds(0).add(1, 'days').toISOString());
-            console.log(moment().hours(0).minutes(0).seconds(0).milliseconds(0).toISOString());
             searchCondition.$and.push({
                 $and: [
                         {update_time: {$lt: moment().hours(0).minutes(0).seconds(0).milliseconds(0).add(1, 'days').toISOString()}},
