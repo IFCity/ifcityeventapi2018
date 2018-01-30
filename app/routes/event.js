@@ -190,46 +190,24 @@ module.exports = function(app, db) {
                 res.send({'error':'An error has occurred'});
             } else {
                 item.update_time = now;
-                if (req.body.name) {
-                    item.name = req.body.name;
-                }
-                if (req.body.category) {
-                    item.category = req.body.category;
-                }
-                if (req.body.description || req.body.description === '') {
-                    item.description = req.body.description;
-                }
-                if (req.body.start_time) {
-                    item.start_time = req.body.start_time;
-                }
-                if (req.body.end_time) {
-                    item.end_time = req.body.end_time;
-                }
-                if (req.body.price) {
-                    item.price = req.body.price;
-                }
-                if (req.body.date) {
-                    item.date = req.body.date;
-                }
-                if (req.body.cover) {
-                    item.cover = req.body.cover;
-                }
+                item.name = req.body.name;
+                item.category = req.body.category;
+                item.description = req.body.description;
+                item.start_time = req.body.start_time;
+                item.end_time = req.body.end_time;
+                item.price = req.body.price;
+                item.cover = req.body.cover;
                 item.invalid = !!req.body.invalid;
-                if (req.body.source) {
-                    item.source = req.body.source;
-                }
-                if (req.body.tags) {
-                    item.tags = req.body.tags;
-                }
-                if (req.body.author) {
-                    item.author = req.body.author;
-                }
-                if (req.body.place) {
-                    item.place = req.body.place;
-                }
-                if (req.body.weeklyRecurrence) {
-                    item.weeklyRecurrence = req.body.weeklyRecurrence;
-                }
+                item.hidden = !!req.body.hidden;
+                item.source = req.body.source;
+                item.tags = req.body.tags;
+                item.author = req.body.author;
+                item.place = req.body.place;
+                item.weeklyRecurrence = req.body.weeklyRecurrence;
+                item.phone = req.body.phone;
+                item.ticketUrl = req.body.ticketUrl;
+                item.tags = req.body.tags;
+                item.metadata = req.body.metadata;
                 db.collection('events').update(details, item, (err, result) => {
                     if (err) {
                         res.send({'error':'An error has occurred'});
@@ -257,11 +235,20 @@ module.exports = function(app, db) {
     app.post('/events/search', (req, res) => {
         let today = getToday();
         let searchCondition = {
-            $and: [
-                {invalid: { $ne: !req.body.show_invalid}},
-                {hidden: { $ne: !req.body.show_hidden}}
-            ]
+            $and: []
         };
+        const showInvalid = !!req.body.show_invalid;
+        const showHidden = !!req.body.show_hidden;
+        if (!showInvalid) {
+            searchCondition.$and.push({
+                invalid: { $ne: true }
+            });
+        }
+        if (!showHidden) {
+            searchCondition.$and.push({
+                hidden: { $ne: true }
+            });
+        }
         if (!req.body.show_all) {
             searchCondition.$and.push({
                 $or: [
