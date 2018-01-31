@@ -123,11 +123,15 @@ module.exports = function(app, db) {
             .find(
                 {
                     $and: [
-                        {invalid: { $ne: true}}, {
-                    $or: [
-                        {start_time: { $gte: today } },
-                        { $and: [{start_time: { $lte: today } }, {end_time: { $gte: today } }] }
-                    ]}]
+                        {invalid: { $ne: true}},
+                        {hidden: { $ne: true}},
+                        {
+                            $or: [
+                                {start_time: { $gte: today } },
+                                { $and: [{start_time: { $lte: today } }, {end_time: { $gte: today } }] }
+                            ]
+                        }
+                    ]
                 }
             )
             .sort({start_time: 1, name: 1})
@@ -139,6 +143,35 @@ module.exports = function(app, db) {
                 }
             });
     });
+
+    app.get('/events/mostviewed', (req, res) => {
+        let today = getToday();
+        db.collection('events')
+            .find(
+                {
+                    $and: [
+                        {invalid: { $ne: true}},
+                        {hidden: { $ne: true}},
+                        {
+                            $or: [
+                                {start_time: { $gte: today } },
+                                { $and: [{start_time: { $lte: today } }, {end_time: { $gte: today } }] }
+                            ]
+                        }
+                    ]
+                }
+            )
+            .sort({view_count: -1, start_time: 1, name: 1})
+            .limit(5)
+            .toArray((err, items) => {
+                if (err) {
+                    res.send({'error':'An error has occurred'});
+                } else {
+                    res.send(items);
+                }
+            });
+    });
+
     app.get('/events/fb/:id', (req, res) => {
         const id = req.params.id;
         const details = { 'id': id };
@@ -169,6 +202,7 @@ module.exports = function(app, db) {
             .map(event => {
                 event.create_time = now;
                 event.update_time = now;
+                event.view_count = 0;
                 return event;
             })
             .value();
@@ -181,7 +215,7 @@ module.exports = function(app, db) {
         });
     });
 
-    app.put ('/events/:id', (req, res) => {
+    app.put('/events/:id', (req, res) => {
         const id = req.params.id;
         const details = { '_id': new ObjectID(id) };
         const now = new Date(Date.now()).toISOString();
@@ -228,6 +262,26 @@ module.exports = function(app, db) {
                 res.send({'error':'An error has occurred'});
             } else {
                 res.send(item);
+            }
+        });
+    });
+
+    app.put('/events/view/:id', (req, res) => {
+        const id = req.params.id;
+        const details = { '_id': new ObjectID(id) };
+        db.collection('events').findOne(details, (err, item) => {
+            if (err) {
+                res.send({'error':'An error has occurred'});
+            } else {
+                item.view_count = (item.view_count || (item.view_count === 0)) ? item.view_count + 1 : 1;
+                db.collection('events').update(details, item, (err, result) => {
+                    if (err) {
+                        res.send({'error':'An error has occurred'});
+                    } else {
+                        res.send(item);
+                    }
+                });
+
             }
         });
     });
@@ -280,58 +334,6 @@ module.exports = function(app, db) {
                     res.send({'error':'An error has occurred'});
                 } else {
                     res.send(items);
-                }
-            });
-    });
-
-    app.get('/integration/events', (req, res) => {
-        let today = getToday();
-
-        let searchCondition = {
-            $and: [
-                {integrate: { $eq: true}},
-                {invalid: { $ne: true}},
-                {
-                    $or: [
-                        {start_time: { $gte: today } },
-                        { $and: [{start_time: { $lte: today } }, {end_time: { $gte: today } }] }
-                    ]
-                }
-            ]
-        };
-
-        if (req.body.categories) {
-            searchCondition.$and.push({
-                category: {
-                    $in: req.body.categories
-                }
-            });
-        }
-
-        if (req.body.facebookOnly) {
-            searchCondition.$and.push({
-                source: {
-                    $eq: 'facebook'
-                }
-            });
-        }
-
-        if (req.body.lastUpdate) {
-            searchCondition.$and.push({
-                updated: {
-                    $gte: req.body.lastUpdate
-                }
-            });
-        }
-
-        db.collection('events')
-            .find(searchCondition)
-            .sort({start_time: 1, name: 1})
-            .toArray((err, items) => {
-                if (err) {
-                    res.send({'error':'An error has occurred'});
-                } else {
-                    res.send(integrationsParse(items));
                 }
             });
     });
