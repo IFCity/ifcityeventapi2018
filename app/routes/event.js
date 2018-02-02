@@ -7,106 +7,24 @@ moment.locale('uk');
 const getToday = () => {
     let t = new Date();
     t.setHours(0,0,0,0);
-    return t.toISOString();
+    return moment().format('YYYY-MM-DDT00:00:00.000[Z]');
 };
 
-const formatPlace = place => {
-    let address = _.get(place, 'location.street');
-    let name = _.get(place, 'name');
-    if (name) {
-        if (address) {
-            return `${name} (${address})`;
-        } else {
-            return name;
-        }
-    } else {
-        if (address) {
-            return address;
-        } else {
-            return ''
-        }
+const getTodayMax = () => {
+    let t = new Date();
+    t.setHours(0,0,0,0);
+    return moment().format('YYYY-MM-DDT23:59:00.000[Z]');
+};
+
+const ALL_DAYS = [2, 4, 8, 16, 32, 64, 128];
+const bitToDays = bits => {
+    let result = [];
+    for (let i = 0; i < ALL_DAYS.length; i++) {
+        result.push(!!(bits & ALL_DAYS[i]));
     }
+    return result;
 };
-
-const formatPrice = price => {
-    let from = _.get(price, 'from', -1) + '';
-    let to = _.get(price, 'to', -1) + '';
-    let notes = _.get(price, 'notes', -1) + '';
-    if (notes !== '-1') {
-        return notes;
-    }
-    if ((from === '-1') && (to === '-1')) {
-        return '';
-    }
-    if ((from === '0') && (to === '-1')) {
-        return 'Безкоштовно';
-    }
-    if ((from !== '-1') && (to !== '-1')) {
-        return `${from}-${to} грн.`;
-    }
-    if (to !== '-1') {
-        return `до ${to} грн.`;
-    }
-    return `${from} грн.`;
-};
-
-const formatDate = timestamp => {
-    if (!timestamp) {
-        return '';
-    }
-    let m = moment(timestamp, 'YYYY-MM-DDTHH:mm:ss');
-    return m.format('YYYY-MM-DDTHH:mm:ss') + '.000Z';
-};
-
-const formatPhone = phone => {
-    return phone || '';
-};
-
-const formatImageLink = cover => {
-    return _.get(cover, 'source', '');
-};
-
-const categoryMap = {
-    not_set: 4,
-    concert: 0,
-    sport: 1,
-    teatr: 2,
-    exibition: 3,
-    film: 5,
-    disco: 6,
-    promo: 7,
-    attention: 8
-};
-
-const formatCategory = category => {
-    return _.get(categoryMap, category, 4);
-};
-
-const integrationsParseItem = item => {
-    return {
-        integration: {
-            id: item._id,
-            updatedAt: formatDate(item.updated)
-        },
-        place: formatPlace(item.place),
-        price: formatPrice(item.price),
-        phone: formatPhone(item.phone),
-        startDate: formatDate(item.start_time),
-        endDate: formatDate(item.end_time),
-        imageLink: formatImageLink(item.cover),
-        title: item.name,
-        type: formatCategory(item.category),
-        description: item.description || '',
-        weeklyRecurrence: item.weeklyRecurrence || '',
-        schedule: item.schedule || ''
-    }
-};
-
-const integrationsParse = items => {
-    return _(items)
-        .map(item => integrationsParseItem(item))
-        .value();
-};
+const MOST_VIEWED_LIMIT = 10;
 
 module.exports = function(app, db) {
     app.all('*', function(req, res, next) {
@@ -146,6 +64,7 @@ module.exports = function(app, db) {
 
     app.get('/events/mostviewed', (req, res) => {
         let today = getToday();
+        let todayMax = getTodayMax();
         db.collection('events')
             .find(
                 {
@@ -155,14 +74,14 @@ module.exports = function(app, db) {
                         {
                             $or: [
                                 {start_time: { $gte: today } },
-                                { $and: [{start_time: { $lte: today } }, {end_time: { $gte: today } }] }
+                                { $and: [{start_time: { $lte: today } }, {end_time: { $gte: todayMax } }] }
                             ]
                         }
                     ]
                 }
             )
             .sort({view_count: -1, start_time: 1, name: 1})
-            .limit(5)
+            .limit(MOST_VIEWED_LIMIT)
             .toArray((err, items) => {
                 if (err) {
                     res.send({'error':'An error has occurred'});
@@ -203,6 +122,7 @@ module.exports = function(app, db) {
                 event.create_time = now;
                 event.update_time = now;
                 event.view_count = 0;
+                event.isSync = false;
                 return event;
             })
             .value();
@@ -242,6 +162,8 @@ module.exports = function(app, db) {
                 item.ticketUrl = req.body.ticketUrl;
                 item.tags = req.body.tags;
                 item.metadata = req.body.metadata;
+                item.isSync = req.body.isSync;
+                item.syncId = req.body.syncId;
                 db.collection('events').update(details, item, (err, result) => {
                     if (err) {
                         res.send({'error':'An error has occurred'});
@@ -288,6 +210,7 @@ module.exports = function(app, db) {
 
     app.post('/events/search', (req, res) => {
         let today = getToday();
+        let todayMax = getTodayMax();
         let searchCondition = {
             $and: []
         };
@@ -307,7 +230,7 @@ module.exports = function(app, db) {
             searchCondition.$and.push({
                 $or: [
                     {start_time: { $gte: today } },
-                    { $and: [{start_time: { $lte: today } }, {end_time: { $gte: today } }] }
+                    { $and: [{start_time: { $lte: today } }, {end_time: { $gte: todayMax } }] }
                 ]
             });
         }
@@ -333,7 +256,29 @@ module.exports = function(app, db) {
                 if (err) {
                     res.send({'error':'An error has occurred'});
                 } else {
-                    res.send(items);
+                    //smart sorting
+                    const today = moment();
+                    const isToday = event => {
+                        let result = moment(event.start_time).format('YYYY-MM-DD') <= today.format('YYYY-MM-DD');
+                        if (result) {
+                            if (!event.weeklyRecurrence) {
+                                result = true;
+                            } else {
+                                const days = bitToDays(event.weeklyRecurrence);
+                                result = days[moment().day()];
+                            }
+                        }
+                        return result;
+                    };
+                    let todayEvents = _(items)
+                        .filter(event => isToday(event))
+                        .orderBy(event => moment(event.update_time))
+                        .reverse()
+                        .value();
+                    let laterEvents = _(items)
+                        .filter(event => !isToday(event))
+                        .value();
+                    res.send([...todayEvents, ...laterEvents]);
                 }
             });
     });
