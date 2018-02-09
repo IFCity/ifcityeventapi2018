@@ -3,6 +3,7 @@ const eventRoutes = require('./event');
 const categoryRoutes = require('./category');
 const usereRoutes = require('./user');
 const authorizationRoutes = require('./authorization');
+const aggregationsRoutes = require('./aggregations');
 
 
 module.exports = function(app, db, fb) {
@@ -11,4 +12,5 @@ module.exports = function(app, db, fb) {
     categoryRoutes(app, db);
     usereRoutes(app, db);
     authorizationRoutes(app, db, fb);
+    aggregationsRoutes(app, db);
 };

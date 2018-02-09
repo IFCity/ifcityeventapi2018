@@ -5,15 +5,7 @@ moment.locale('uk');
 
 
 const getToday = () => {
-    let t = new Date();
-    t.setHours(0,0,0,0);
-    return moment().format('YYYY-MM-DDT00:00:00.000[Z]');
-};
-
-const getTodayMax = () => {
-    let t = new Date();
-    t.setHours(0,0,0,0);
-    return moment().format('YYYY-MM-DDT23:59:00.000[Z]');
+    return moment(moment().format('YYYY-MM-DDT00:00:00[+0200]')).toISOString();
 };
 
 const ALL_DAYS = [2, 4, 8, 16, 32, 64, 128];
@@ -64,7 +56,6 @@ module.exports = function(app, db) {
 
     app.get('/events/mostviewed', (req, res) => {
         let today = getToday();
-        let todayMax = getTodayMax();
         db.collection('events')
             .find(
                 {
@@ -74,7 +65,7 @@ module.exports = function(app, db) {
                         {
                             $or: [
                                 {start_time: { $gte: today } },
-                                { $and: [{start_time: { $lte: today } }, {end_time: { $gte: todayMax } }] }
+                                { $and: [{start_time: { $lte: today } }, {end_time: { $gte: today } }] }
                             ]
                         }
                     ]
@@ -123,6 +114,8 @@ module.exports = function(app, db) {
                 event.update_time = now;
                 event.view_count = 0;
                 event.isSync = false;
+                event.start_time = moment(event.start_time).toISOString();
+                event.end_time = moment(event.end_time).toISOString();
                 return event;
             })
             .value();
@@ -147,8 +140,8 @@ module.exports = function(app, db) {
                 item.name = req.body.name;
                 item.category = req.body.category;
                 item.description = req.body.description;
-                item.start_time = req.body.start_time;
-                item.end_time = req.body.end_time;
+                item.start_time = moment(req.body.start_time).toISOString();
+                item.end_time = moment(req.body.end_time).toISOString();
                 item.price = req.body.price;
                 item.cover = req.body.cover;
                 item.invalid = !!req.body.invalid;
@@ -210,7 +203,6 @@ module.exports = function(app, db) {
 
     app.post('/events/search', (req, res) => {
         let today = getToday();
-        let todayMax = getTodayMax();
         let searchCondition = {
             $and: []
         };
@@ -230,7 +222,7 @@ module.exports = function(app, db) {
             searchCondition.$and.push({
                 $or: [
                     {start_time: { $gte: today } },
-                    { $and: [{start_time: { $lte: today } }, {end_time: { $gte: todayMax } }] }
+                    { $and: [{start_time: { $lte: today } }, {end_time: { $gte: today } }] }
                 ]
             });
         }
