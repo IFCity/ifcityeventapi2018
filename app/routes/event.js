@@ -18,8 +18,8 @@ const bitToDays = bits => {
 };
 const MOST_VIEWED_LIMIT = 10;
 
-module.exports = function(app, db) {
-    app.all('*', function(req, res, next) {
+module.exports = function (app, db) {
+    app.all('*', function (req, res, next) {
         res.header('Access-Control-Allow-Origin', '*');
         res.header('Access-Control-Allow-Methods', 'PUT, GET, POST, DELETE, OPTIONS');
         res.header('Access-Control-Allow-Headers', 'Content-Type');
@@ -28,26 +28,35 @@ module.exports = function(app, db) {
 
 
     app.get('/events', (req, res) => {
-        let today = getToday();
+        const today = moment().format('YYYY-MM-DDT00:00:00.000[Z]');
         db.collection('events')
-            .find(
+            .aggregate([
                 {
-                    $and: [
-                        {invalid: { $ne: true}},
-                        {hidden: { $ne: true}},
-                        {
-                            $or: [
-                                {start_time: { $gte: today } },
-                                { $and: [{start_time: { $lte: today } }, {end_time: { $gte: today } }] }
-                            ]
+                    $match: {
+                        $and: [
+                            {invalid: {$ne: true}},
+                            {hidden: {$ne: true}},
+                            {
+                                $or: [
+                                    {start_time: {$gte: today}},
+                                    {$and: [{start_time: {$lte: today}}, {end_time: {$gte: today}}]}
+                                ]
+                            }
+                        ]
+                    }
+                },
+                {
+                    $addFields: {
+                        startCalcDate: {
+                            $cond: {if: {$lt: ["$start_time", today]}, then: today, else: "$start_time"}
                         }
-                    ]
+                    }
                 }
-            )
-            .sort({start_time: 1, name: 1})
+            ])
+            .sort({startCalcDate: 1, update_time: 1, name: 1})
             .toArray((err, items) => {
                 if (err) {
-                    res.send({'error':'An error has occurred'});
+                    res.send({'error': 'An error has occurred'});
                 } else {
                     res.send(items);
                 }
@@ -60,12 +69,12 @@ module.exports = function(app, db) {
             .find(
                 {
                     $and: [
-                        {invalid: { $ne: true}},
-                        {hidden: { $ne: true}},
+                        {invalid: {$ne: true}},
+                        {hidden: {$ne: true}},
                         {
                             $or: [
-                                {start_time: { $gte: today } },
-                                { $and: [{start_time: { $lte: today } }, {end_time: { $gte: today } }] }
+                                {start_time: {$gte: today}},
+                                {$and: [{start_time: {$lte: today}}, {end_time: {$gte: today}}]}
                             ]
                         }
                     ]
@@ -75,7 +84,7 @@ module.exports = function(app, db) {
             .limit(MOST_VIEWED_LIMIT)
             .toArray((err, items) => {
                 if (err) {
-                    res.send({'error':'An error has occurred'});
+                    res.send({'error': 'An error has occurred'});
                 } else {
                     res.send(items);
                 }
@@ -84,10 +93,10 @@ module.exports = function(app, db) {
 
     app.get('/events/fb/:id', (req, res) => {
         const id = req.params.id;
-        const details = { 'id': id };
+        const details = {'id': id};
         db.collection('events').findOne(details, (err, item) => {
             if (err) {
-                res.send({'error':'An error has occurred'});
+                res.send({'error': 'An error has occurred'});
             } else {
                 res.send(item);
             }
@@ -96,10 +105,10 @@ module.exports = function(app, db) {
 
     app.get('/events/:id', (req, res) => {
         const id = req.params.id;
-        const details = { '_id': new ObjectID(id) };
+        const details = {'_id': new ObjectID(id)};
         db.collection('events').findOne(details, (err, item) => {
             if (err) {
-                res.send({'error':'An error has occurred'});
+                res.send({'error': 'An error has occurred'});
             } else {
                 res.send(item);
             }
@@ -115,13 +124,17 @@ module.exports = function(app, db) {
                 event.view_count = 0;
                 event.isSync = false;
                 event.start_time = moment(event.start_time).toISOString();
-                event.end_time = moment(event.end_time).toISOString();
+                if (event.end_time) {
+                    event.end_time = moment(event.end_time).toISOString();
+                } else {
+                    event.end_time = undefined;
+                }
                 return event;
             })
             .value();
         db.collection('events').insert(events, (err, result) => {
             if (err) {
-                res.send({ 'error': err });
+                res.send({'error': err});
             } else {
                 res.send(result.ops);
             }
@@ -130,11 +143,11 @@ module.exports = function(app, db) {
 
     app.put('/events/:id', (req, res) => {
         const id = req.params.id;
-        const details = { '_id': new ObjectID(id) };
+        const details = {'_id': new ObjectID(id)};
         const now = new Date(Date.now()).toISOString();
         db.collection('events').findOne(details, (err, item) => {
             if (err) {
-                res.send({'error':'An error has occurred'});
+                res.send({'error': 'An error has occurred'});
             } else {
                 item.update_time = now;
                 item.name = req.body.name;
@@ -159,7 +172,7 @@ module.exports = function(app, db) {
                 item.syncId = req.body.syncId;
                 db.collection('events').update(details, item, (err, result) => {
                     if (err) {
-                        res.send({'error':'An error has occurred'});
+                        res.send({'error': 'An error has occurred'});
                     } else {
                         res.send(item);
                     }
@@ -171,10 +184,10 @@ module.exports = function(app, db) {
 
     app.delete('/events/:id', (req, res) => {
         const id = req.params.id;
-        const details = { '_id': new ObjectID(id) };
+        const details = {'_id': new ObjectID(id)};
         db.collection('events').remove(details, (err, item) => {
             if (err) {
-                res.send({'error':'An error has occurred'});
+                res.send({'error': 'An error has occurred'});
             } else {
                 res.send(item);
             }
@@ -183,15 +196,15 @@ module.exports = function(app, db) {
 
     app.put('/events/view/:id', (req, res) => {
         const id = req.params.id;
-        const details = { '_id': new ObjectID(id) };
+        const details = {'_id': new ObjectID(id)};
         db.collection('events').findOne(details, (err, item) => {
             if (err) {
-                res.send({'error':'An error has occurred'});
+                res.send({'error': 'An error has occurred'});
             } else {
                 item.view_count = (item.view_count || (item.view_count === 0)) ? item.view_count + 1 : 1;
                 db.collection('events').update(details, item, (err, result) => {
                     if (err) {
-                        res.send({'error':'An error has occurred'});
+                        res.send({'error': 'An error has occurred'});
                     } else {
                         res.send(item);
                     }
@@ -202,36 +215,42 @@ module.exports = function(app, db) {
     });
 
     app.post('/events/search', (req, res) => {
-        let today = getToday();
+        const today = getToday();
         let searchCondition = {
             $and: []
         };
         const showInvalid = !!req.body.show_invalid;
         const showHidden = !!req.body.show_hidden;
+        const showNotSync = !!req.body.show_not_sync;
         if (!showInvalid) {
             searchCondition.$and.push({
-                invalid: { $ne: true }
+                invalid: {$ne: true}
             });
         }
         if (!showHidden) {
             searchCondition.$and.push({
-                hidden: { $ne: true }
+                hidden: {$ne: true}
             });
         }
+        /* if (showNotSync) {
+            searchCondition.$and.push({
+                isSync: {$ne: true}
+            });
+        } */
         if (!req.body.show_all) {
             searchCondition.$and.push({
                 $or: [
-                    {start_time: { $gte: today } },
-                    { $and: [{start_time: { $lte: today } }, {end_time: { $gte: today } }] }
+                    {start_time: {$gte: today}},
+                    {$and: [{start_time: {$lte: today}}, {end_time: {$gte: today}}]}
                 ]
             });
         }
         if (req.body.new) {
             searchCondition.$and.push({
                 $and: [
-                        {update_time: {$lt: moment().hours(0).minutes(0).seconds(0).milliseconds(0).add(1, 'days').toISOString()}},
-                        {update_time: {$gte: moment().hours(0).minutes(0).seconds(0).milliseconds(0).toISOString()}}
-                    ]
+                    {update_time: {$lt: moment().hours(0).minutes(0).seconds(0).milliseconds(0).add(1, 'days').toISOString()}},
+                    {update_time: {$gte: moment().hours(0).minutes(0).seconds(0).milliseconds(0).toISOString()}}
+                ]
             });
         }
         if (req.body.categories) {
@@ -241,36 +260,93 @@ module.exports = function(app, db) {
                 }
             });
         }
+        if (req.body.tag) {
+            const tags = _(req.body.tag.split(','))
+                .map(item => ({tags: {$regex: `.*${item.trim()}.*`}}))
+                .value();
+            if (tags.length > 1) {
+                searchCondition.$and.push({
+                    $or: tags
+                });
+            } else {
+                searchCondition.$and.push(tags[0]);
+            }
+        }
+        if (req.body.weekend) {
+            const from = moment().day(6).format('YYYY-MM-DDT00:00:00[+0200]');
+            const to = moment().day(7).add(1, 'day').format('YYYY-MM-DDT00:00:00[+0200]');
+            searchCondition.$and.push({
+                $or: [
+                    {$and: [{start_time: {$lte: to}}, {start_time: {$gte: from}}]},
+                    {$and: [{start_time: {$lte: to}}, {end_time: {$gte: from}}]}
+                ]
+            });
+        }
         db.collection('events')
-            .find(searchCondition)
-            .sort({start_time: 1, name: 1})
+            .aggregate([
+                {
+                    $match: searchCondition
+                },
+                {
+                    $addFields: {
+                        startCalcDate: {
+                            $cond: {if: {$lt: ["$start_time", today]}, then: today, else: "$start_time"}
+                        }
+                    }
+                }
+            ])
+            .sort({startCalcDate: 1, update_time: -1, name: 1})
             .toArray((err, items) => {
                 if (err) {
-                    res.send({'error':'An error has occurred'});
+                    res.send({'error': 'An error has occurred'});
                 } else {
-                    //smart sorting
-                    const today = moment();
-                    const isToday = event => {
-                        let result = moment(event.start_time).format('YYYY-MM-DD') <= today.format('YYYY-MM-DD');
-                        if (result) {
-                            if (!event.weeklyRecurrence) {
-                                result = true;
-                            } else {
-                                const days = bitToDays(event.weeklyRecurrence);
-                                result = days[moment().day()];
+                    let filteredEvents = _(items)
+                        .map(item => {
+                            const todayButTime = moment(item.start_time).set({
+                                'year': moment().get('year'),
+                                'month': moment().get('month'),
+                                'date': moment().get('date')
+                            });
+                            item.startCalcDate = moment(item.start_time) < moment() ? todayButTime.format('YYYY-MM-DDTHH:mm:00[+0200]') : item.start_time;
+                            if (item.weeklyRecurrence) {
+                                const days = bitToDays(item.weeklyRecurrence);
+                                const todayDayNumber = moment(item.startCalcDate).day();
+                                let newDays = [];
+                                for (let i = todayDayNumber; i < ALL_DAYS.length; i++) {
+                                    newDays.push(days[i]);
+                                }
+                                for (let i = 0; i < todayDayNumber; i++) {
+                                    newDays.push(days[i]);
+                                }
+                                for (let i = 0; i < newDays.length; i++) {
+                                    if (newDays[i]) {
+                                        item.startCalcDate = moment(item.startCalcDate).add(i, 'days').format('YYYY-MM-DDTHH:mm:00.000[+0200]');
+                                        break;
+                                    }
+                                }
                             }
-                        }
-                        return result;
-                    };
-                    let todayEvents = _(items)
-                        .filter(event => isToday(event))
-                        .orderBy(event => moment(event.update_time))
-                        .reverse()
+                            return item;
+                        })
+                        .orderBy([item => moment(item.startCalcDate)])
                         .value();
-                    let laterEvents = _(items)
-                        .filter(event => !isToday(event))
-                        .value();
-                    res.send([...todayEvents, ...laterEvents]);
+                    if (req.body.weekend) {
+                        filteredEvents = _(filteredEvents)
+                            .filter(item => {
+                                if (!item.weeklyRecurrence) {
+                                    return true;
+                                }
+                                const days = bitToDays(item.weeklyRecurrence);
+                                return days[6] || days[7];
+                            })
+                            .value();
+                    }
+                    /* if (req.body.page) {
+                        const page = parseInt(req.body.page || 1);
+                        const itemsPerPage = parseInt(req.body.itemsPerPage || 5);
+                        res.send(filteredEvents.slice((page - 1) * itemsPerPage, itemsPerPage));
+                    } else { */
+                        res.send(filteredEvents);
+                    // }
                 }
             });
     });
