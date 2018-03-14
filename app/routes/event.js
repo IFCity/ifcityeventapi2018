@@ -16,7 +16,57 @@ const bitToDays = bits => {
     }
     return result;
 };
-const MOST_VIEWED_LIMIT = 10;
+const MOST_VIEWED_LIMIT = 20;
+
+const parseEvents = (items, body) => {
+    let filteredEvents = _(items)
+        .map(item => {
+            const todayButTime = moment(item.start_time).set({
+                'year': moment().get('year'),
+                'month': moment().get('month'),
+                'date': moment().get('date')
+            });
+            item.startCalcDate = moment(item.start_time) < moment() ? todayButTime.format('YYYY-MM-DDTHH:mm:00[+0200]') : item.start_time;
+            if (item.weeklyRecurrence) {
+                const days = bitToDays(item.weeklyRecurrence);
+                const todayDayNumber = moment(item.startCalcDate).day();
+                let newDays = [];
+                for (let i = todayDayNumber; i < ALL_DAYS.length; i++) {
+                    newDays.push(days[i]);
+                }
+                for (let i = 0; i < todayDayNumber; i++) {
+                    newDays.push(days[i]);
+                }
+                for (let i = 0; i < newDays.length; i++) {
+                    if (newDays[i]) {
+                        item.startCalcDate = moment(item.startCalcDate).add(i, 'days').format('YYYY-MM-DDTHH:mm:00.000[+0200]');
+                        break;
+                    }
+                }
+            }
+            return item;
+        })
+        .orderBy([item => moment(item.startCalcDate)])
+        .value();
+    if (body.weekend) {
+        filteredEvents = _(filteredEvents)
+            .filter(item => {
+                if (!item.weeklyRecurrence) {
+                    return true;
+                }
+                const days = bitToDays(item.weeklyRecurrence);
+                return days[6] || days[7];
+            })
+            .value();
+    }
+    /* if (req.body.page) {
+        const page = parseInt(req.body.page || 1);
+        const itemsPerPage = parseInt(req.body.itemsPerPage || 5);
+        res.send(filteredEvents.slice((page - 1) * itemsPerPage, itemsPerPage));
+    } else { */
+    return filteredEvents;
+    // }
+};
 
 module.exports = function (app, db) {
     app.all('*', function (req, res, next) {
@@ -80,13 +130,41 @@ module.exports = function (app, db) {
                     ]
                 }
             )
-            .sort({view_count: -1, start_time: 1, name: 1})
+            .sort({editorChoice: -1, view_count: -1, start_time: 1, name: 1})
             .limit(MOST_VIEWED_LIMIT)
             .toArray((err, items) => {
                 if (err) {
                     res.send({'error': 'An error has occurred'});
                 } else {
-                    res.send(items);
+                    let filteredEvents = _(items)
+                        .map(item => {
+                            const todayButTime = moment(item.start_time).set({
+                                'year': moment().get('year'),
+                                'month': moment().get('month'),
+                                'date': moment().get('date')
+                            });
+                            item.startCalcDate = moment(item.start_time) < moment() ? todayButTime.format('YYYY-MM-DDTHH:mm:00[+0200]') : item.start_time;
+                            if (item.weeklyRecurrence) {
+                                const days = bitToDays(item.weeklyRecurrence);
+                                const todayDayNumber = moment(item.startCalcDate).day();
+                                let newDays = [];
+                                for (let i = todayDayNumber; i < ALL_DAYS.length; i++) {
+                                    newDays.push(days[i]);
+                                }
+                                for (let i = 0; i < todayDayNumber; i++) {
+                                    newDays.push(days[i]);
+                                }
+                                for (let i = 0; i < newDays.length; i++) {
+                                    if (newDays[i]) {
+                                        item.startCalcDate = moment(item.startCalcDate).add(i, 'days').format('YYYY-MM-DDTHH:mm:00.000[+0200]');
+                                        break;
+                                    }
+                                }
+                            }
+                            return item;
+                        })
+                        .value();
+                    res.send(filteredEvents);
                 }
             });
     });
@@ -170,6 +248,7 @@ module.exports = function (app, db) {
                 item.metadata = req.body.metadata;
                 item.isSync = req.body.isSync;
                 item.syncId = req.body.syncId;
+                item.editorChoice = !!req.body.editorChoice;
                 db.collection('events').update(details, item, (err, result) => {
                     if (err) {
                         res.send({'error': 'An error has occurred'});
@@ -232,11 +311,11 @@ module.exports = function (app, db) {
                 hidden: {$ne: true}
             });
         }
-        /* if (showNotSync) {
+        if (showNotSync) {
             searchCondition.$and.push({
                 isSync: {$ne: true}
             });
-        } */
+        }
         if (!req.body.show_all) {
             searchCondition.$and.push({
                 $or: [
@@ -300,53 +379,8 @@ module.exports = function (app, db) {
                 if (err) {
                     res.send({'error': 'An error has occurred'});
                 } else {
-                    let filteredEvents = _(items)
-                        .map(item => {
-                            const todayButTime = moment(item.start_time).set({
-                                'year': moment().get('year'),
-                                'month': moment().get('month'),
-                                'date': moment().get('date')
-                            });
-                            item.startCalcDate = moment(item.start_time) < moment() ? todayButTime.format('YYYY-MM-DDTHH:mm:00[+0200]') : item.start_time;
-                            if (item.weeklyRecurrence) {
-                                const days = bitToDays(item.weeklyRecurrence);
-                                const todayDayNumber = moment(item.startCalcDate).day();
-                                let newDays = [];
-                                for (let i = todayDayNumber; i < ALL_DAYS.length; i++) {
-                                    newDays.push(days[i]);
-                                }
-                                for (let i = 0; i < todayDayNumber; i++) {
-                                    newDays.push(days[i]);
-                                }
-                                for (let i = 0; i < newDays.length; i++) {
-                                    if (newDays[i]) {
-                                        item.startCalcDate = moment(item.startCalcDate).add(i, 'days').format('YYYY-MM-DDTHH:mm:00.000[+0200]');
-                                        break;
-                                    }
-                                }
-                            }
-                            return item;
-                        })
-                        .orderBy([item => moment(item.startCalcDate)])
-                        .value();
-                    if (req.body.weekend) {
-                        filteredEvents = _(filteredEvents)
-                            .filter(item => {
-                                if (!item.weeklyRecurrence) {
-                                    return true;
-                                }
-                                const days = bitToDays(item.weeklyRecurrence);
-                                return days[6] || days[7];
-                            })
-                            .value();
-                    }
-                    /* if (req.body.page) {
-                        const page = parseInt(req.body.page || 1);
-                        const itemsPerPage = parseInt(req.body.itemsPerPage || 5);
-                        res.send(filteredEvents.slice((page - 1) * itemsPerPage, itemsPerPage));
-                    } else { */
-                        res.send(filteredEvents);
-                    // }
+                    const result = parseEvents(items, req.body);
+                    res.send(result);
                 }
             });
     });
