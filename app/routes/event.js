@@ -249,6 +249,7 @@ module.exports = function (app, db) {
                 item.isSync = req.body.isSync;
                 item.syncId = req.body.syncId;
                 item.editorChoice = !!req.body.editorChoice;
+                item.isForChildren = !!req.body.isForChildren;
                 db.collection('events').update(details, item, (err, result) => {
                     if (err) {
                         res.send({'error': 'An error has occurred'});
